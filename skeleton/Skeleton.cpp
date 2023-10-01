@@ -28,7 +28,7 @@ namespace {
         DenseMap<Instruction*, VariableInfo*> InstToVariableInfo;
         static char ID; // Pass identification, replacement for typeid
 
-        OurMemToReg() : FunctionPass(ID) {}
+        OurMemToReg() {}
         bool linkDefsAndUsesToVar(VariableInfo *VarInfo) {
             for (auto *Use : VarInfo->Alloca->users()) {
                 Instruction *UseInst;
@@ -79,7 +79,11 @@ namespace {
                     }
                 }
             }
-            for (auto *DNChild : DN->getChildren()) {
+//            auto children = DN->getChildren();
+//            for (size_t i = 0; i < children.size(); ++i) {
+//             for (auto *DNChild : DN->getChildren()) {
+            for (auto &DNChild : DN->getChildren()) {
+                auto *DNChild = children[i];
                 renameRecursive(DNChild);
             }
             for (Instruction &InstRef : BB) {
@@ -98,58 +102,49 @@ namespace {
             }
         }
 
-        bool runOnFunction(Function &F) override {
-            // We need the iterated dominance frontier of defs to place phi-nodes
-            DominatorTree &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
-            ForwardIDFCalculator IDF(DT);
-            // Find allocas and then link defs (stores) and uses (loads) to variables
-            // (allocas)
-            for (auto &InstRef : F.getEntryBlock()) {
-                AllocaInst *Alloca;
-                if ((Alloca = dyn_cast<AllocaInst>(&InstRef))) {
-                    VariableInfo *VarInfo = new VariableInfo(Alloca);
-                    if (linkDefsAndUsesToVar(VarInfo))
-                        VariableInfos.push_back(VarInfo);
-                    else
-                        delete VarInfo;
-                }
-            }
-
-            // Insert phi-nodes in iterated dominance frontier of defs
-            for (auto VarInfo : VariableInfos) {
-                IDF.setDefiningBlocks(VarInfo->DefBlocks);
-                SmallVector<BasicBlock *, 32> PHIBlocks;
-                IDF.calculate(PHIBlocks);
-                for (auto PB : PHIBlocks) {
-                    Instruction *PN;
-                    PN = PHINode::Create(VarInfo->Alloca->getAllocatedType(), 0, "", &PB->front());
-                    InstToVariableInfo[PN] = VarInfo;
-                }
-            }
-
-            // Do renaming
-            DomTreeNode *DN = DT.getNode(&F.getEntryBlock());
-            renameRecursive(DN);
-            // Remove trash
-            for (auto *Trash : TrashList) {
-                Trash->eraseFromParent();
-            }
-            for (auto *VarInfo : VariableInfos) {
-                VarInfo->Alloca->eraseFromParent();
-            }
-            return true; // ? todo check
-        }
-
-        void getAnalysisUsage(AnalysisUsage &AU) const override {
-            AU.addRequired<DominatorTreeWrapperPass>();
-            AU.setPreservesCFG();
-        }
-
         PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM) {
+            DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
             for (auto &F : M) {
-                runOnFunction(F);
+                // We need the iterated dominance frontier of defs to place phi-nodes
+                DominatorTree &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
+                ForwardIDFCalculator IDF(DT);
+                // Find allocas and then link defs (stores) and uses (loads) to variables
+                // (allocas)
+                for (auto &InstRef : F.getEntryBlock()) {
+                    AllocaInst *Alloca;
+                    if ((Alloca = dyn_cast<AllocaInst>(&InstRef))) {
+                        VariableInfo *VarInfo = new VariableInfo(Alloca);
+                        if (linkDefsAndUsesToVar(VarInfo))
+                            VariableInfos.push_back(VarInfo);
+                        else
+                            delete VarInfo;
+                    }
+                }
+    
+                // Insert phi-nodes in iterated dominance frontier of defs
+                for (auto VarInfo : VariableInfos) {
+                    IDF.setDefiningBlocks(VarInfo->DefBlocks);
+                    SmallVector<BasicBlock *, 32> PHIBlocks;
+                    IDF.calculate(PHIBlocks);
+                    for (auto PB : PHIBlocks) {
+                        Instruction *PN;
+                        PN = PHINode::Create(VarInfo->Alloca->getAllocatedType(), 0, "", &PB->front());
+                        InstToVariableInfo[PN] = VarInfo;
+                    }
+                }
+    
+                // Do renaming
+                DomTreeNode *DN = DT.getNode(&F.getEntryBlock());
+                renameRecursive(DN);
+                // Remove trash
+                for (auto *Trash : TrashList) {
+                    Trash->eraseFromParent();
+                }
+                for (auto *VarInfo : VariableInfos) {
+                    VarInfo->Alloca->eraseFromParent();
+                }
             }
-            return PreservedAnalyses::all();
+            return PreservedAnalyses::all(); // ? todo check
         };
     };  // end struct OurMemToReg
 } // end namespace
