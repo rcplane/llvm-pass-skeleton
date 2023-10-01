@@ -95,11 +95,14 @@ namespace {
             }
         }
 
-        PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM) {
-            DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
-            for (auto &F : M) {
+//        PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM) {
+        PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM) {
+//            FunctionAnalysisManager &FAM = AM.getResult<FunctionAnalysisManager>(M);
+//            for (auto &F : M) {
                 // We need the iterated dominance frontier of defs to place phi-nodes
-                DominatorTree &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
+//                DominatorTree &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
+//                DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
+                DominatorTree &DT = getAnalysis<DominatorTree>(F);
                 ForwardIDFCalculator IDF(DT);
                 // Find allocas and then link defs (stores) and uses (loads) to variables
                 // (allocas)
@@ -136,7 +139,7 @@ namespace {
                 for (auto *VarInfo : VariableInfos) {
                     VarInfo->Alloca->eraseFromParent();
                 }
-            }
+//            }
             return PreservedAnalyses::all(); // ? todo check
         };
     };  // end struct OurMemToReg
