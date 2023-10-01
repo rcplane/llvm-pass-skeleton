@@ -13,9 +13,6 @@
 
 using namespace llvm;
 namespace {
-//    struct SkeletonPass : public PassInfoMixin<SkeletonPass> 
-//    class OurMemToReg : public PassInfoMixin<OurMemToReg> {
-//    struct OurMemToReg : public FunctionPass {
     struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
         struct VariableInfo {
             VariableInfo(AllocaInst *AI) : Alloca(AI) {}
@@ -79,11 +76,7 @@ namespace {
                     }
                 }
             }
-//            auto children = DN->getChildren();
-//            for (size_t i = 0; i < children.size(); ++i) {
-//             for (auto *DNChild : DN->getChildren()) {
-            for (auto &DNChild : DN->getChildren()) {
-                auto *DNChild = children[i];
+            for (auto DNChild : DN->children()) {
                 renameRecursive(DNChild);
             }
             for (Instruction &InstRef : BB) {
