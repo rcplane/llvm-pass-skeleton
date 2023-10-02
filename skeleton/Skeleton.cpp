@@ -1,15 +1,12 @@
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/IteratedDominanceFrontier.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/Pass.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
-#include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
 namespace {
@@ -90,17 +87,11 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
   }
 
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM) {
-    //   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM) {
-    //            FunctionAnalysisManager &FAM =
-    //            AM.getResult<FunctionAnalysisManager>(M);
     FunctionAnalysisManager &fam =
         AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
     for (auto &F : M) {
       // We need the iterated dominance frontier of defs to place phi-nodes
-      //                DominatorTree &DT =
-      //                getAnalysis<DominatorTreeWrapperPass>().getDomTree();
       DominatorTree &DT = fam.getResult<DominatorTreeAnalysis>(F);
-      // DominatorTree &DT = getAnalysis<DominatorTree>(F);
       ForwardIDFCalculator IDF(DT);
       // Find allocas and then link defs (stores) and uses (loads) to variables
       // (allocas)
@@ -150,10 +141,6 @@ llvmGetPassPluginInfo() {
           .PluginName = "Our mem2reg pass",
           .PluginVersion = "v0.1",
           .RegisterPassBuilderCallbacks = [](PassBuilder &PB) {
-            // ModuleAnalysisManager MAM;
-            // FunctionAnalysisManager FAM;
-            // PB.registerFunctionAnalyses(FAM);
-            // PB.crossRegisterProxies(FAM, MAM);
             PB.registerPipelineStartEPCallback(
                 [](ModulePassManager &FPM, OptimizationLevel Level) {
                   FPM.addPass(OurMemToReg());
