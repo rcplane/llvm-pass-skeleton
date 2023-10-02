@@ -1,1 +1,3 @@
 build
+exec/*
+.vscode/c_cpp_properties.json
