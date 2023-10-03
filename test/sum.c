@@ -6,3 +6,7 @@ int sum(int *data, int len)
   }
   return s;
 }
+int main() {
+  int v[] = {1, 1};
+  sum(v,2);
+}
