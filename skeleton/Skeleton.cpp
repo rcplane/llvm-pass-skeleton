@@ -87,11 +87,14 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
   }
 
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM) {
-    FunctionAnalysisManager &fam =
+    FunctionAnalysisManager &FAM =
         AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
     for (auto &F : M) {
+      if (F.empty()) {
+        continue;
+      }
       // We need the iterated dominance frontier of defs to place phi-nodes
-      DominatorTree &DT = fam.getResult<DominatorTreeAnalysis>(F);
+      DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
       ForwardIDFCalculator IDF(DT);
       // Find allocas and then link defs (stores) and uses (loads) to variables
       // (allocas)
@@ -126,11 +129,13 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
       for (auto *Trash : TrashList) {
         Trash->eraseFromParent();
       }
+      TrashList.clear();
       for (auto *VarInfo : VariableInfos) {
         VarInfo->Alloca->eraseFromParent();
       }
+      VariableInfos.clear();
     }
-    return PreservedAnalyses::all(); // ? todo check
+    return PreservedAnalyses::none(); // ? todo check
   };
 }; // end struct OurMemToReg
 } // end namespace
@@ -142,8 +147,8 @@ llvmGetPassPluginInfo() {
           .PluginVersion = "v0.1",
           .RegisterPassBuilderCallbacks = [](PassBuilder &PB) {
             PB.registerPipelineStartEPCallback(
-                [](ModulePassManager &FPM, OptimizationLevel Level) {
-                  FPM.addPass(OurMemToReg());
+                [](ModulePassManager &MPM, OptimizationLevel Level) {
+                  MPM.addPass(OurMemToReg());
                 });
           }};
 }
