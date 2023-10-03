@@ -1,21 +1,21 @@
 [envs.buildpass]
-command = "clang -O0 -fpass-plugin=`ls ../build/skeleton/SkeletonPass.*` {filename} -o ../exec/{base}.pass"
+command = "cd ../build && make && cd ../test && `brew --prefix llvm`/bin/clang -O0 -fpass-plugin=`ls ../build/skeleton/SkeletonPass.*` {filename} -o ../exec/{base}.pass"
 output.buildpass = "-"
 
 [envs.build]
-command = "clang {filename} -o ../exec/{base}.o"
+command = "`brew --prefix llvm`/bin/clang {filename} -o ../exec/{base}.o"
 output.build = "-"
 
 [envs.buildzero]
-command = "clang -O0 {filename} -o ../exec/{base}.zero"
+command = "`brew --prefix llvm`/bin/clang -O0 {filename} -o ../exec/{base}.zero"
 output.buildzero = "-"
 
 [envs.emitzero]
-command = "clang -O0 -emit-llvm -S {filename} -o {base}.emitzero && cat {base}.emitzero"
+command = "`brew --prefix llvm`/bin/clang -O0 -emit-llvm -S {filename} -o {base}.emitzero && cat {base}.emitzero"
 output.emitzero = "-"
 
 [envs.emitpass]
-command = "clang -O0 -emit-llvm -S -fpass-plugin=`ls ../build/skeleton/SkeletonPass.*` {filename} -o {base}.emitpass && cat {base}.emitpass"
+command = "`brew --prefix llvm`/bin/clang -O0 -emit-llvm -S -fpass-plugin=`ls ../build/skeleton/SkeletonPass.*` {filename} -o {base}.emitpass && cat {base}.emitpass"
 output.emitpass = "-"
 
 [envs.exec]
