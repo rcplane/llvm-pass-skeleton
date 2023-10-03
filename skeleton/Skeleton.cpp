@@ -43,33 +43,34 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
     return true;
   }
 
-  void rename(DomTreeNode *DN) {
+  void renameRecursive(DomTreeNode *DN) {
     BasicBlock &BB = *DN->getBlock();
 
-    for (auto &Inst : BB) {
-      if (auto *VarInfo = InstToVariableInfo[&Inst]) {
-        if (isa<StoreInst>(&Inst)) {
-          VarInfo->DefStack.push_back(Inst.getOperand(0));
-        } else if (isa<LoadInst>(&Inst)) {
-          if (!VarInfo->DefStack.empty()) {
-            Inst.replaceAllUsesWith(VarInfo->DefStack.back());
-          }
-        } else if (isa<PHINode>(&Inst)) {
-           VarInfo->DefStack.push_back(&Inst);
+    for (Instruction &InstRef : BB) {
+      Instruction *Inst = &InstRef;
+      VariableInfo *VarInfo;
+      if (isa<StoreInst>(Inst) && (VarInfo = InstToVariableInfo[Inst])) {
+        VarInfo->DefStack.push_back(Inst->getOperand(0));
+      } else if (isa<LoadInst>(Inst) && (VarInfo = InstToVariableInfo[Inst])) {
+        if (VarInfo->DefStack.size() > 0) {
+          Inst->replaceAllUsesWith(VarInfo->DefStack.back());
+        }
+      } else if (isa<PHINode>(Inst) && (VarInfo = InstToVariableInfo[Inst])) {
+        VarInfo->DefStack.push_back(Inst);
+      }
+    }
+    for (succ_iterator I = succ_begin(&BB), E = succ_end(&BB); I != E; ++I) {
+      for (Instruction &InstRef : **I) {
+        PHINode *Phi;
+        VariableInfo *VarInfo;
+        if ((Phi = dyn_cast<PHINode>(&InstRef)) &&
+            (VarInfo = InstToVariableInfo[&InstRef])) {
+          Phi->addIncoming(VarInfo->DefStack.back(), &BB);
         }
       }
     }
-    for (auto *Succ : successors(&BB)) {
-      for (Instruction &InstRef : *Succ) {
-        if (auto *Phi = dyn_cast<PHINode>(&InstRef)) {
-          if (auto *VarInfo = InstToVariableInfo[&InstRef]) {
-              Phi->addIncoming(VarInfo->DefStack.back(), &BB);
-          }
-        }
-      }
-    }
-    for (auto *DNChild : DN->children()) {
-      rename(DNChild);
+    for (auto DNChild : DN->children()) {
+      renameRecursive(DNChild);
     }
     for (Instruction &InstRef : BB) {
       Instruction *Inst = &InstRef;
@@ -85,7 +86,13 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
     }
   }
 
-  PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM) {
+    FunctionAnalysisManager &FAM =
+        AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
+    for (auto &F : M) {
+      if (F.empty()) {
+        continue;
+      }
       // We need the iterated dominance frontier of defs to place phi-nodes
       DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
       ForwardIDFCalculator IDF(DT);
@@ -117,7 +124,7 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
 
       // Do renaming
       DomTreeNode *DN = DT.getNode(&F.getEntryBlock());
-      rename(DN);
+      renameRecursive(DN);
       // Remove trash
       for (auto *Trash : TrashList) {
         Trash->eraseFromParent();
@@ -127,6 +134,7 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
         VarInfo->Alloca->eraseFromParent();
       }
       VariableInfos.clear();
+    }
     return PreservedAnalyses::none(); // ? todo check
   };
 }; // end struct OurMemToReg
@@ -140,7 +148,7 @@ llvmGetPassPluginInfo() {
           .RegisterPassBuilderCallbacks = [](PassBuilder &PB) {
             PB.registerPipelineStartEPCallback(
                 [](ModulePassManager &MPM, OptimizationLevel Level) {
-                  MPM.addPass(createModuleToFunctionPassAdaptor(OurMemToReg()));
+                  MPM.addPass(OurMemToReg());
                 });
           }};
 }
