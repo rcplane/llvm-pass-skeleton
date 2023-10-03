@@ -50,11 +50,11 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
       if (auto *VarInfo = InstToVariableInfo[&Inst]) {
         if (isa<StoreInst>(&Inst)) {
           VarInfo->DefStack.push_back(Inst.getOperand(0));
-        } else if (isa<LoadInst>(Inst)) {
+        } else if (isa<LoadInst>(&Inst)) {
           if (!VarInfo->DefStack.empty()) {
             Inst.replaceAllUsesWith(VarInfo->DefStack.back());
           }
-        } else if (isa<PHINode>(Inst)) {
+        } else if (isa<PHINode>(&Inst)) {
            VarInfo->DefStack.push_back(&Inst);
         }
       }
