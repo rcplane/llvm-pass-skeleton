@@ -18,28 +18,20 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
     std::vector<Value *> DefStack;
   };
   std::vector<Instruction *> TrashList;
-  std::vector<VariableInfo *> VariableInfos;
+  std::vector<std::unique_ptr<VariableInfo>> VariableInfos;
   DenseMap<Instruction *, VariableInfo *> InstToVariableInfo;
   static char ID; // Pass identification, replacement for typeid
 
   OurMemToReg() {}
-  bool linkDefsAndUsesToVar(VariableInfo *VarInfo) {
+  void linkDefsAndUsesToVar(VariableInfo *VarInfo) {
     for (auto *Use : VarInfo->Alloca->users()) {
-      if (auto *UseInst = dyn_cast<LoadInst>(Use)) {
-        InstToVariableInfo[UseInst] = VarInfo;
-      } else if (auto *UseInst = dyn_cast<StoreInst>(Use)) {
-        // Need to check that the U is actually address and not datum
-        if (UseInst->getOperand(1) == VarInfo->Alloca) {
-          InstToVariableInfo[UseInst] = VarInfo;
-          VarInfo->DefBlocks.insert(UseInst->getParent());
-        } else {
-          return false;
-        }
-      } else {
-        return false;
+      if (auto *Load = dyn_cast<LoadInst>(Use)) {
+        InstToVariableInfo[Load] = VarInfo;
+      } else if (auto *Store = dyn_cast<StoreInst>(Use)) {
+        InstToVariableInfo[Store] = VarInfo;
+        VarInfo->DefBlocks.insert(Store->getParent());
       }
     }
-    return true;
   }
 
   static bool escapes(AllocaInst *Alloc) {
@@ -50,7 +42,9 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
         if (Store->getValueOperand() == Alloc) {
           return true;
         }
+        continue;
       }
+      return true;
     }
     return false;
   }
@@ -90,14 +84,15 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
 
     for (Instruction &InstRef : BB) {
       Instruction *Inst = &InstRef;
-      VariableInfo *VarInfo;
-      if (isa<StoreInst>(Inst) && (VarInfo = InstToVariableInfo[Inst])) {
-        VarInfo->DefStack.pop_back();
-        TrashList.push_back(Inst);
-      } else if (isa<PHINode>(Inst) && (VarInfo = InstToVariableInfo[Inst])) {
-        VarInfo->DefStack.pop_back();
-      } else if (isa<LoadInst>(Inst) && InstToVariableInfo[Inst]) {
-        TrashList.push_back(Inst);
+      if (auto *VarInfo = InstToVariableInfo[Inst]) {
+        if (isa<StoreInst>(Inst)) {
+          VarInfo->DefStack.pop_back();
+          TrashList.push_back(Inst);
+        } else if (isa<PHINode>(Inst)) {
+          VarInfo->DefStack.pop_back();
+        } else if (isa<LoadInst>(Inst)) {
+          TrashList.push_back(Inst);
+        }
       }
     }
 
@@ -116,27 +111,23 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
       // Find allocas and then link defs (stores) and uses (loads) to variables
       // (allocas)
       for (auto &InstRef : F.getEntryBlock()) {
-        AllocaInst *Alloca;
-        if ((Alloca = dyn_cast<AllocaInst>(&InstRef))) {
-          VariableInfo *VarInfo = new VariableInfo(Alloca);
+        if (auto *Alloca = dyn_cast<AllocaInst>(&InstRef)) {
+          auto VarInfo = std::make_unique<VariableInfo>(Alloca);
           if (escapes(Alloca)) continue;
-          if (linkDefsAndUsesToVar(VarInfo))
-            VariableInfos.push_back(VarInfo);
-          else
-            delete VarInfo;
+          linkDefsAndUsesToVar(VarInfo.get());
+          VariableInfos.push_back(std::move(VarInfo));
         }
       }
 
       // Insert phi-nodes in iterated dominance frontier of defs
-      for (auto VarInfo : VariableInfos) {
+      for (auto &VarInfo : VariableInfos) {
         IDF.setDefiningBlocks(VarInfo->DefBlocks);
         SmallVector<BasicBlock *, 32> PHIBlocks;
         IDF.calculate(PHIBlocks);
-        for (auto PB : PHIBlocks) {
-          Instruction *PN;
-          PN = PHINode::Create(VarInfo->Alloca->getAllocatedType(), 0, "",
+        for (auto *PB : PHIBlocks) {
+          auto *PN = PHINode::Create(VarInfo->Alloca->getAllocatedType(), 0, "",
                                &PB->front());
-          InstToVariableInfo[PN] = VarInfo;
+          InstToVariableInfo[PN] = VarInfo.get();
         }
       }
 
@@ -148,9 +139,10 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
         Trash->eraseFromParent();
       }
       TrashList.clear();
-      for (auto *VarInfo : VariableInfos) {
+      for (auto &VarInfo : VariableInfos) {
         VarInfo->Alloca->eraseFromParent();
       }
+      InstToVariableInfo.clear();
       VariableInfos.clear();
     }
     return PreservedAnalyses::none(); // ? todo check
