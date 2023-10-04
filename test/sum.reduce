@@ -1,0 +1,2 @@
+llvm ir line count built with pass:       57 sum.emitpass
+llvm ir line count built with Opt0:       72 sum.emitzero

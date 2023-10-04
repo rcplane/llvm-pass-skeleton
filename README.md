@@ -1,7 +1,7 @@
 # Cornell CS6120 Lesson 7 Mem2Reg reimplementation based on llvm-pass-skeleton
 
 It simplifies small programs removing unneeded memory traffic using register allocation as an LLVM pass.
-It's for LLVM 17.
+It's for LLVM 17. Assumes llvm@17 and cmake install on Mac, has also been adapted to llvm 14 on Windows.
 
 Build:
 ```
@@ -20,5 +20,6 @@ Turnt test:
 ```
     $ cd test
     $ vim turnt.toml   # Check your clang prefix
-    $ turnt *.c        # seg fault on build pass with array_alloc_print.c known issue
+    $ conda deactivate # if needed for clean linker environment on Mac or Linux
+    $ turnt *.c        # may need a repeat to see clean build expected ouput
 ```

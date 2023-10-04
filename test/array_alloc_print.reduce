@@ -1,0 +1,2 @@
+llvm ir line count built with pass:      174 array_alloc_print.emitpass
+llvm ir line count built with Opt0:      208 array_alloc_print.emitzero

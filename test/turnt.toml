@@ -7,6 +7,7 @@ command = "`brew --prefix llvm`/bin/clang {filename} -o ../exec/{base}.o"
 output.build = "-"
 
 [envs.buildzero]
+default = false
 command = "`brew --prefix llvm`/bin/clang -O0 {filename} -o ../exec/{base}.zero"
 output.buildzero = "-"
 
@@ -15,7 +16,7 @@ command = "`brew --prefix llvm`/bin/clang -O0 -emit-llvm -S {filename} -o {base}
 output.emitzero = "-"
 
 [envs.emitpass]
-command = "`brew --prefix llvm`/bin/clang -O0 -emit-llvm -S -fpass-plugin=`ls ../build/skeleton/SkeletonPass.*` {filename} -o {base}.emitpass && cat {base}.emitpass"
+command = "cd ../build && make > /dev/null && cd ../test && `brew --prefix llvm`/bin/clang -O0 -emit-llvm -S -fpass-plugin=`ls ../build/skeleton/SkeletonPass.*` {filename} -o {base}.emitpass && cat {base}.emitpass"
 output.emitpass = "-"
 
 [envs.exec]
@@ -35,6 +36,11 @@ rm -f tmp_{base}.out
 rm -f tmp_{base}.pass.out"""
 output.test = "-"
 
-
+[envs.reduce]
+command = """
+echo "llvm ir line count built with pass: $(wc -l {base}.emitpass)"
+echo "llvm ir line count built with Opt0: $(wc -l {base}.emitzero)"
+[ "$(wc -l < "{base}.emitpass" | tr -d ' ')" -lt "$(wc -l < "{base}.emitzero" | tr -d ' ')" ] """
+output.reduce = "-"
 
 
