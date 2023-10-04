@@ -25,10 +25,9 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
   OurMemToReg() {}
   bool linkDefsAndUsesToVar(VariableInfo *VarInfo) {
     for (auto *Use : VarInfo->Alloca->users()) {
-      Instruction *UseInst;
-      if ((UseInst = dyn_cast<LoadInst>(Use))) {
+      if (auto *UseInst = dyn_cast<LoadInst>(Use)) {
         InstToVariableInfo[UseInst] = VarInfo;
-      } else if ((UseInst = dyn_cast<StoreInst>(Use))) {
+      } else if (auto *UseInst = dyn_cast<StoreInst>(Use)) {
         // Need to check that the U is actually address and not datum
         if (UseInst->getOperand(1) == VarInfo->Alloca) {
           InstToVariableInfo[UseInst] = VarInfo;
@@ -59,17 +58,17 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
   void renameRecursive(DomTreeNode *DN) {
     BasicBlock &BB = *DN->getBlock();
 
-    for (Instruction &InstRef : BB) {
-      Instruction *Inst = &InstRef;
-      VariableInfo *VarInfo;
-      if (isa<StoreInst>(Inst) && (VarInfo = InstToVariableInfo[Inst])) {
-        VarInfo->DefStack.push_back(Inst->getOperand(0));
-      } else if (isa<LoadInst>(Inst) && (VarInfo = InstToVariableInfo[Inst])) {
-        if (VarInfo->DefStack.size() > 0) {
-          Inst->replaceAllUsesWith(VarInfo->DefStack.back());
+    for (auto &Inst : BB) {
+      if (auto *VarInfo = InstToVariableInfo[&Inst]) {
+        if (isa<StoreInst>(&Inst)) {
+          VarInfo->DefStack.push_back(Inst.getOperand(0));
+        } else if (isa<LoadInst>(&Inst)) {
+          if (!VarInfo->DefStack.empty()) {
+            Inst.replaceAllUsesWith(VarInfo->DefStack.back());
+          }
+        } else if (isa<PHINode>(&Inst)) {
+          VarInfo->DefStack.push_back(&Inst);
         }
-      } else if (isa<PHINode>(Inst) && (VarInfo = InstToVariableInfo[Inst])) {
-        VarInfo->DefStack.push_back(Inst);
       }
     }
 
