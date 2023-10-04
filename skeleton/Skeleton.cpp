@@ -43,6 +43,19 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
     return true;
   }
 
+  static bool escapes(AllocaInst *Alloc) {
+    for (auto *Use : Alloc->users()) {
+      if (isa<LoadInst>(Use))
+        continue;
+      if (auto *Store = dyn_cast<StoreInst>(Use)) {
+        if (Store->getValueOperand() == Alloc) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   void renameRecursive(DomTreeNode *DN) {
     BasicBlock &BB = *DN->getBlock();
 
@@ -59,19 +72,23 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
         VarInfo->DefStack.push_back(Inst);
       }
     }
-    for (succ_iterator I = succ_begin(&BB), E = succ_end(&BB); I != E; ++I) {
-      for (Instruction &InstRef : **I) {
-        PHINode *Phi;
-        VariableInfo *VarInfo;
-        if ((Phi = dyn_cast<PHINode>(&InstRef)) &&
-            (VarInfo = InstToVariableInfo[&InstRef])) {
-          Phi->addIncoming(VarInfo->DefStack.back(), &BB);
+
+    for (auto *Succ : successors(&BB)) {
+      for (Instruction &InstRef : *Succ) {
+        if (auto *Phi = dyn_cast<PHINode>(&InstRef)) {
+          if (auto *VarInfo = InstToVariableInfo[&InstRef]) {
+            if (!VarInfo->DefStack.empty()) {
+              Phi->addIncoming(VarInfo->DefStack.back(), &BB);
+            }
+          }
         }
       }
     }
+
     for (auto DNChild : DN->children()) {
       renameRecursive(DNChild);
     }
+
     for (Instruction &InstRef : BB) {
       Instruction *Inst = &InstRef;
       VariableInfo *VarInfo;
@@ -84,6 +101,7 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
         TrashList.push_back(Inst);
       }
     }
+
   }
 
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM) {
@@ -102,6 +120,7 @@ struct OurMemToReg : public PassInfoMixin<OurMemToReg> {
         AllocaInst *Alloca;
         if ((Alloca = dyn_cast<AllocaInst>(&InstRef))) {
           VariableInfo *VarInfo = new VariableInfo(Alloca);
+          if (escapes(Alloca)) continue;
           if (linkDefsAndUsesToVar(VarInfo))
             VariableInfos.push_back(VarInfo);
           else
