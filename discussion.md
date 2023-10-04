@@ -18,10 +18,21 @@ was modeled as a module pass, but the mem2reg pass we wanted to implement was
 per-function. There was a lot of googling involved to figure out the right way
 to write our pass. This was made worse by the fact that LLVM had come out with a
 "new" Pass Manager system, which rendered many resources we found (in the
-context of the legacy PM) unhelpful.
+context of the legacy PM) unhelpful. We needed to use LLVM's dominator tree
+algorithms for our implementations as well, so we had to get extra familiar with
+the LLVM library.
 
 We also ran into issues while programming that were exacerbated by the fact that
 we were using C++. Anything in the pass that broke during execution would simply
 be a segfault, maybe accompanied by a sometimes-useful stacktrace. There were
 several bugs where the fix was easy and most of the time was spent tracking down
 the problem.
+
+Another obstacle we encountered with squashing bugs was in discovering the bugs
+themselves. After our "first draft" of the implementation was able to compile,
+we were able to apply the pass to a simple program and emit correct-looking IR.
+However, as we tested it on more programs, we discovered more issues. Compared
+to working with bril and the benchmark programs that were provided, it
+definitely felt more difficult to be confident in the correctness of our pass
+given the increased compexity of C/LLVM IR and starting from scratch with test
+cases.
